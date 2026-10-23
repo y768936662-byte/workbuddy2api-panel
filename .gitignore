@@ -45,3 +45,22 @@ docs/
 *.zip
 server.exe
 .DS_Store
+
+# ---- 本机自用部署产物（不提交到仓库）----
+# 交叉编译的 Linux 二进制（本机挂载覆盖用，体积大）
+/wb2api-linux-amd64
+# 本机桌面一键入口与私有脚本
+/一键调用.cmd
+/查使用量.cmd
+/手动领积分.cmd
+/添加账号.cmd
+/服务体检.cmd
+/使用说明.md
+/入口总览.md
+/_wb2api.py
+/_import_models.py
+/_probe_*.py
+/_verify_wb.py
+/_models_probe.txt
+/autosetup.json
+/usage_report.md

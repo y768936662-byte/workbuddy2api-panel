@@ -48,6 +48,32 @@ func isDeepSeekModel(model string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "deepseek")
 }
 
+// effortRequiredModels 必须带 reasoning_effort 才能被上游接受的模型（裸名）。
+//
+// 根因（2026-10-23 实测）：glm-5.1 在不带 reasoning_effort 时上游直接返
+// 400/11101（网关归类 no_healthy_account），带上任意合法档位即正常。
+// 它不在 isDeepSeekModel 范围内，所以旧版 injectThinking 完全不碰它 ——
+// 第三方客户端（如 WorkBuddy 自定义模型接入）不会主动带 reasoning_effort，
+// 于是该模型对这类客户端 100% 不可用。
+//
+// 这里列出的是「已实测：不带 effort 必失败」的模型。新增前请务必实测确认
+// （带 / 不带各跑一次 chat/completions），不要凭模型名猜。
+var effortRequiredModels = map[string]bool{
+	"glm-5.1": true,
+}
+
+// requiresEffortInjection 报告该模型是否需要网关补 reasoning_effort。
+// 两类：
+//   - deepseek 系：一律注入（历史行为，thinking:{type:"enabled"} + 补档）。
+//   - effortRequiredModels：只补 effort 档位，**不注入 thinking 开关**
+//     （这些模型走各自的 thinkingFormat，注入 thinking 字段反而可能被上游拒）。
+func requiresEffortInjection(model string) bool {
+	if isDeepSeekModel(model) {
+		return true
+	}
+	return effortRequiredModels[strings.ToLower(strings.TrimSpace(model))]
+}
+
 // backfillReasoningContent DeepSeek 多轮一致性：保证每条 assistant 消息带
 // reasoning_content 字段且值为 string——即 requiresReasoningContentOnAssistantMessages
 // （官方客户端 matches 规则，issue #165 对齐官方 apply 门控）。
@@ -155,7 +181,14 @@ func backfillReasoningContent(obj map[string]any) {
 // 空串时回退硬编码 defaultDeepSeekEffort（向后兼容）。
 func injectThinking(obj map[string]any, defaultEffort string) {
 	model, _ := obj["model"].(string)
+	if !requiresEffortInjection(model) {
+		return
+	}
+	// 非 deepseek 但强制需要 effort 的模型（effortRequiredModels）：
+	// 只补 reasoning_effort 档位，**不注入 thinking 开关**——
+	// 它们走各自的 thinkingFormat，多塞一个 thinking 字段可能被上游判为非法参数。
 	if !isDeepSeekModel(model) {
+		ensureDeepSeekEffort(obj, defaultEffort)
 		return
 	}
 	th, ok := obj["thinking"].(map[string]any)
